@@ -1,0 +1,65 @@
+ENV['VAGRANT_HOME'] = 'D:/VMware-VMs/vagrant'
+ENV['VAGRANT_VMWARE_CLONE_DIRECTORY'] = 'D:/VMware-VMs/vagrant'
+
+Vagrant.configure("2") do |config|
+
+    config.vm.define "guacamole" do |guacamole|
+
+        guacamole.vm.box = "generic/ubuntu2110"
+
+        guacamole.vm.provider "vmware_desktop" do |v, override|
+            v.gui = true
+            v.linked_clone = false
+            v.vmx["memsize"] = "4096"
+            v.vmx["numvcpus"] = "2"
+        end
+    
+        guacamole.vm.provision:shell, inline: <<-SHELL
+            echo "root:rootroot" | sudo chpasswd
+            sudo timedatectl set-timezone Europe/Berlin
+        SHELL
+    
+        guacamole.vm.define "guacamole" do |ubuntu|
+            ubuntu.vm.hostname = "guacamole"
+            
+        end
+
+        guacamole.vm.network :forwarded_port, guest: 443, host: 443, id: "https-traefik"
+        guacamole.vm.network :forwarded_port, guest: 8088, host: 8080, id: "dashboard-traefik"
+        guacamole.vm.network :forwarded_port, guest: 8081, host: 8081, id: "http-guacamole"
+  
+        # Full upgrade
+        #guacamole.vm.provision :shell, inline: "sudo apt-get -y update -y && sudo apt-get -y upgrade"
+        #guacamole.vm.provision :shell, inline: "sudo apt-get -y autoremove --purge"
+        #guacamole.vm.provision :shell, inline: "sudo reboot"
+
+        # Install packages to allow apt-get to use a repository over HTTPS
+        guacamole.vm.provision :shell, inline: "sudo apt-get -y install apt-transport-https ca-certificates curl software-properties-common git"
+
+        # Updating the Local Repository
+        guacamole.vm.provision :shell, inline: "sudo apt-get update"
+
+        # Installing Docker
+        guacamole.vm.provision :shell, inline: "sudo apt-get -y install docker.io docker-compose"
+
+        # Starting Docker Service 
+        guacamole.vm.provision :shell, inline: "sudo systemctl start docker"
+        guacamole.vm.provision :shell, inline: "sudo systemctl enable docker"
+
+        # Create folder structure
+        guacamole.vm.provision :shell, inline: "sudo mkdir -p /srv/guacamole"
+
+        guacamole.vm.provision :shell, inline: "sudo git clone https://github.com/jansvensen/guacamole.git /srv/guacamole"
+
+        # Start script
+        guacamole.vm.provision "shell_start_container", type: "shell", inline: <<-SHELL
+          cd /srv/guacamole
+          sudo /bin/sh /srv/guacamole/start.sh
+        SHELL
+
+       # Reboot
+        guacamole.vm.provision :shell, inline: "sudo reboot"
+    
+    end
+  
+end
